@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Issue Details | CivicTrack</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    body { font-family: 'Nunito', sans-serif; }
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .gallery img {
+      width: 80px;
+      height: 60px;
+      object-fit: cover;
+      margin-right: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .issue-card {
+      background-color: #111;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 20px;
+      max-width: 850px;
+      margin: 20px auto;
+      color: #fff;
+    }
+  </style>
+</head>
+<body class="bg-black text-white min-h-screen">
+  <!-- Header -->
+  <header class="flex justify-between items-center p-4 border-b border-gray-700">
+    <h1 class="text-2xl font-bold">CivicTrack</h1>
+    <button onclick="window.history.back()" class="bg-gray-700 hover:bg-gray-800 px-4 py-1 rounded-full">Back</button>
+  </header>
+
+  <!-- Issue Detail Card -->
+  <div class="issue-card">
+    <!-- Top Section -->
+    <div class="flex justify-between mb-4">
+      <h2 id="issueTitle" class="text-2xl font-bold"></h2>
+      <div class="text-right">
+        <div>
+          <span class="status-dot" id="statusDot"></span>
+          <span id="issueStatus" class="text-orange-400 font-semibold"></span>
+        </div>
+        <p id="issueReporter" class="text-sm text-gray-400"></p>
+      </div>
+    </div>
+
+    <!-- Main Image -->
+    <img id="issueImage" src="" alt="Issue Image" class="w-full h-60 object-cover rounded mb-4">
+
+    <!-- Details -->
+    <p id="issueDate" class="text-gray-400 mb-1"></p>
+    <a href="#" id="reportSpamBtn" class="text-red-400 text-sm hover:underline mb-3 inline-block">Report Spam</a>
+    <p id="issueDescription" class="text-gray-300 mb-4"></p>
+
+    <!-- Location -->
+    <div class="border border-gray-700 rounded p-3 mb-4">
+      <h3 class="text-lg font-semibold mb-1">📍 Location</h3>
+      <p id="issueLocation" class="text-sm text-gray-300 mb-2"></p>
+      <div id="map" class="w-full h-40 rounded"></div>
+    </div>
+
+    <!-- Photo Gallery -->
+    <div id="photoGallery" class="gallery flex mt-2 mb-4"></div>
+
+    <!-- Activity log -->
+    <div class="border-t border-gray-700 pt-4">
+      <h3 class="text-lg font-semibold mb-2">Activity</h3>
+      <ul id="activityLog" class="text-sm text-gray-400 list-disc pl-5"></ul>
+    </div>
+
+    <!-- Owner actions -->
+    <div id="ownerActions" class="flex flex-col gap-3 mt-4 hidden">
+      <div>
+        <label class="block text-sm mb-1">Update Status</label>
+        <select id="editStatus" class="w-full bg-gray-800 p-2 rounded border border-gray-600 text-white">
+          <option value="Reported">Reported</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Restored">Restored</option>
+        </select>
+      </div>
+      <div class="flex gap-4">
+        <button id="saveStatusBtn" class="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700">Save Status</button>
+        <button id="deleteIssueBtn" class="bg-red-600 px-4 py-2 rounded hover:bg-red-700">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script -->
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const issueId = params.get("id");
+
+    let issues = JSON.parse(localStorage.getItem("issues")) || [];
+    const issue = issues[issueId];
+
+    if (!issue) {
+      document.body.innerHTML = "<h2 class='text-center text-red-400 mt-20'>Issue not found.</h2>";
+    } else {
+      // Fill details
+      document.getElementById("issueTitle").textContent = issue.title;
+      document.getElementById("issueImage").src = issue.photos?.[0] || "https://via.placeholder.com/600x200";
+      document.getElementById("issueStatus").textContent = issue.status;
+      document.getElementById("issueReporter").textContent = "Reported by: " + (issue.anonymous ? "Anonymous" : issue.user);
+      document.getElementById("issueLocation").textContent = issue.location?.address || "Location not specified";
+      document.getElementById("issueDate").textContent = issue.dateTime || "No date available";
+      document.getElementById("issueDescription").textContent = issue.description;
+
+      // Set current status in dropdown
+      document.getElementById("editStatus").value = issue.status;
+
+      // Status dot color
+      const dot = document.getElementById("statusDot");
+      function updateDotColor(status){
+        dot.style.backgroundColor =
+          status === "In Progress" ? "orange" :
+          status === "Resolved" ? "green" :
+          status === "Restored" ? "blue" : "red";
+      }
+      updateDotColor(issue.status);
+
+      // Gallery
+      const gallery = document.getElementById("photoGallery");
+      (issue.photos || []).forEach(photo => {
+        const img = document.createElement("img");
+        img.src = photo;
+        gallery.appendChild(img);
+      });
+
+      // Activity log
+      const activityLog = document.getElementById("activityLog");
+      function renderActivity() {
+        activityLog.innerHTML = "";
+        (issue.activity || []).forEach(log => {
+          const li = document.createElement("li");
+          li.textContent = log;
+          activityLog.appendChild(li);
+        });
+      }
+      renderActivity();
+
+      // Show owner buttons only if logged-in user is issue owner
+      const currentUser = localStorage.getItem("loggedInUser");
+      if (issue.user === currentUser) {
+        document.getElementById("ownerActions").classList.remove("hidden");
+      }
+
+      // Map
+      const lat = issue.location?.lat || 23.0225;
+      const lng = issue.location?.lng || 72.5714;
+      const map = L.map("map").setView([lat, lng], 14);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap contributors" }).addTo(map);
+      L.marker([lat, lng]).addTo(map).bindPopup(issue.location?.address || "Reported Location").openPopup();
+
+      // ✅ Save new status
+      document.getElementById("saveStatusBtn").addEventListener("click", () => {
+        const newStatus = document.getElementById("editStatus").value;
+        issue.status = newStatus;
+        issue.activity = issue.activity || [];
+        issue.activity.push(`${new Date().toLocaleDateString()} - Status changed to "${newStatus}"`);
+        issues[issueId] = issue;
+        localStorage.setItem("issues", JSON.stringify(issues));
+
+        document.getElementById("issueStatus").textContent = newStatus;
+        updateDotColor(newStatus);
+        renderActivity();
+
+        alert("Status updated successfully!");
+      });
+
+      // ✅ Delete issue
+      document.getElementById("deleteIssueBtn").addEventListener("click", () => {
+        if (confirm("Are you sure you want to delete this issue?")) {
+          issues.splice(issueId, 1);
+          localStorage.setItem("issues", JSON.stringify(issues));
+          alert("Issue deleted successfully.");
+          window.location.href = "dashboard.html";
+        }
+      });
+    }
+  </script>
+</body>
+</html>

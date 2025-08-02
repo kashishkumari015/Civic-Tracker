@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CivicTrack | Home</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white font-sans min-h-screen">
+
+  <!-- Header with Login/Dashboard Buttons -->
+  <header class="flex justify-between items-center p-4 border-b border-gray-700">
+    <h1 class="text-2xl font-bold text-white">CivicTrack</h1>
+    <div class="space-x-2">
+      <button onclick="location.href='login.html'" id="loginBtn" class="bg-red-400 hover:bg-red-500 text-white px-4 py-1 rounded-full">
+        Login
+      </button>
+      <button onclick="location.href='dashboard.html'" id="dashboardBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-1 rounded-full hidden">
+        Dashboard
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="p-4">
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <select id="filterCategory" class="bg-gray-800 text-white border border-gray-600 p-2 rounded">
+        <option value="">Category</option>
+        <option value="Road">Road</option>
+        <option value="Lighting">Lighting</option>
+        <option value="Water Supply">Water Supply</option>
+        <option value="Cleanliness">Cleanliness</option>
+        <option value="Public Safety">Public Safety</option>
+        <option value="Obstructions">Obstructions</option>
+      </select>
+
+      <select id="filterStatus" class="bg-gray-800 text-white border border-gray-600 p-2 rounded">
+        <option value="">Status</option>
+        <option value="Reported">Reported</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Resolved">Resolved</option>
+        <option value="Restored">Restored</option>
+      </select>
+
+      <select id="filterDistance" class="bg-gray-800 text-white border border-gray-600 p-2 rounded">
+        <option value="">Distance</option>
+        <option value="1">1 km</option>
+        <option value="3">3 km</option>
+        <option value="5">5 km</option>
+      </select>
+
+      <input id="searchInput" type="text" placeholder="Search Issues" class="flex-grow bg-gray-800 text-white border border-gray-600 p-2 rounded">
+    </div>
+
+    <!-- Issue Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6" id="issuesContainer">
+      <!-- Dynamic issues will load here -->
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="flex justify-center mt-8 space-x-2 hidden"></div>
+  </main>
+
+  <!-- JS -->
+  <script>
+    const categoryFilter = document.getElementById('filterCategory');
+    const statusFilter = document.getElementById('filterStatus');
+    const searchInput = document.getElementById('searchInput');
+    const issuesContainer = document.getElementById('issuesContainer');
+    const pagination = document.getElementById('pagination');
+    const itemsPerPage = 6;
+    let currentPage = 1;
+
+    function renderIssues() {
+      issuesContainer.innerHTML = '';
+      let issues = JSON.parse(localStorage.getItem('issues')) || [];
+
+      // Filters
+      const selectedCategory = categoryFilter.value;
+      const selectedStatus = statusFilter.value;
+      const searchText = searchInput.value.toLowerCase();
+
+      const filtered = issues.filter(issue => {
+        const matchCategory = !selectedCategory || issue.category === selectedCategory;
+        const matchStatus = !selectedStatus || issue.status === selectedStatus;
+        const matchSearch = !searchText || issue.title.toLowerCase().includes(searchText) || issue.description.toLowerCase().includes(searchText);
+        return matchCategory && matchStatus && matchSearch;
+      });
+
+      // Pagination setup
+      const totalPages = Math.ceil(filtered.length / itemsPerPage);
+      const start = (currentPage - 1) * itemsPerPage;
+      const paginatedIssues = filtered.slice(start, start + itemsPerPage);
+
+      if (filtered.length === 0) {
+        issuesContainer.innerHTML = `<p class="text-gray-400 col-span-3 text-center">No issues found.</p>`;
+        pagination.classList.add('hidden');
+      } else {
+        paginatedIssues.forEach((issue, index) => {
+          const realIndex = issues.indexOf(issue);
+          const card = `
+            <a href="issue-details.html?id=${realIndex}" class="block bg-gray-900 rounded-xl p-3 space-y-2 hover:bg-gray-800 transition">
+              <img src="${issue.photos?.[0] || 'https://via.placeholder.com/300x150'}" alt="${issue.title}" class="rounded-lg w-full h-40 object-cover">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="bg-yellow-700 text-white px-2 py-1 rounded">${issue.category}</span>
+                <span class="bg-orange-600 px-2 py-1 rounded text-white">${issue.status}</span>
+                <span class="text-gray-400 ml-auto">${issue.dateTime}</span>
+              </div>
+              <div class="text-lg font-semibold">${issue.title}</div>
+              <p class="text-sm text-gray-400">${issue.description}</p>
+              <p class="text-xs text-gray-500">🏙️ ${issue.location?.address || "No location provided"}</p>
+            </a>`;
+          issuesContainer.insertAdjacentHTML('beforeend', card);
+        });
+
+        // Pagination
+        pagination.innerHTML = '';
+        pagination.classList.remove('hidden');
+        if (totalPages > 1) {
+          pagination.innerHTML += `<button class="bg-gray-800 px-3 py-1 rounded-full text-white" onclick="changePage(-1)">&lt;</button>`;
+          for (let i = 1; i <= totalPages; i++) {
+            pagination.innerHTML += `<button onclick="goToPage(${i})" class="${i===currentPage?'bg-white text-black':'bg-gray-800 text-white'} px-3 py-1 rounded-full">${i}</button>`;
+          }
+          pagination.innerHTML += `<button class="bg-gray-800 px-3 py-1 rounded-full text-white" onclick="changePage(1)">&gt;</button>`;
+        }
+      }
+    }
+
+    function changePage(step) {
+      const issues = JSON.parse(localStorage.getItem('issues')) || [];
+      const totalPages = Math.ceil(issues.length / itemsPerPage);
+      currentPage = Math.min(Math.max(1, currentPage + step), totalPages);
+      renderIssues();
+    }
+
+    function goToPage(page) {
+      currentPage = page;
+      renderIssues();
+    }
+
+    // Filters
+    categoryFilter.addEventListener('change', () => { currentPage = 1; renderIssues(); });
+    statusFilter.addEventListener('change', () => { currentPage = 1; renderIssues(); });
+    searchInput.addEventListener('input', () => { currentPage = 1; renderIssues(); });
+
+    // Show correct buttons (Login/Dashboard)
+    const isLoggedIn = localStorage.getItem('loggedIn');
+    if (isLoggedIn === 'true') {
+      document.getElementById('loginBtn').classList.add('hidden');
+      document.getElementById('dashboardBtn').classList.remove('hidden');
+    }
+
+    // Initial load
+    renderIssues();
+  </script>
+</body>
+</html>

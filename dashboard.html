@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard | CivicTrack</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Nunito', sans-serif; }
+    .card-shadow { box-shadow: 0 4px 14px rgba(255, 255, 255, 0.05); }
+    #preview img { max-width: 70px; margin-right: 5px; border-radius: 5px; }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen">
+
+  <!-- Top Navbar -->
+  <nav class="flex justify-between items-center px-6 py-4 border-b border-gray-700 bg-gray-900">
+    <div class="text-2xl font-semibold">CivicTrack</div>
+    <div class="flex items-center space-x-4">
+      <button id="myIssuesBtn" class="hover:text-yellow-400">My Issues</button>
+      <button id="reportIssueBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">Report New Issue</button>
+      <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">Logout</button>
+    </div>
+  </nav>
+
+  <!-- My Issues Modal -->
+  <div id="myIssuesModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50">
+    <div class="bg-gray-900 p-6 rounded-xl w-full max-w-lg border border-gray-700">
+      <h2 class="text-xl font-semibold mb-4">My Issues</h2>
+      <div id="myIssuesList" class="space-y-3"></div>
+      <button id="closeMyIssues" class="mt-4 w-full bg-gray-600 hover:bg-gray-700 py-2 rounded text-white font-semibold">Close</button>
+    </div>
+  </div>
+
+  <!-- Report New Issue Modal -->
+  <div id="reportModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50">
+    <div class="bg-gray-900 p-6 rounded-xl w-full max-w-md border border-gray-700">
+      <h2 class="text-xl font-semibold mb-4">Report New Issue</h2>
+
+      <div class="mb-4">
+        <label class="block text-sm mb-1">Title</label>
+        <input id="issueTitle" type="text" class="w-full bg-gray-800 p-2 rounded border border-gray-600 text-white">
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm mb-2">Upload Photos (Max 5)</label>
+        <input type="file" id="photoInput" accept="image/*" multiple class="w-full bg-gray-800 p-2 rounded border border-gray-600 text-white"/>
+        <div id="preview" class="flex mt-2"></div>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm mb-2">Location (Auto-detected or Pin-Drop)</label>
+        <div id="map" class="w-full h-40 rounded"></div>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm mb-1">Category</label>
+        <select id="issueCategory" class="w-full bg-gray-800 p-2 rounded border border-gray-600 text-white">
+          <option value="">Select Category</option>
+          <option>Streetlight</option>
+          <option>Garbage</option>
+          <option>Road</option>
+          <option>Cleanliness</option>
+        </select>
+      </div>
+
+      <!-- ✅ New Status Dropdown -->
+      <div class="mb-4">
+        <label class="block text-sm mb-1">Status</label>
+        <select id="issueStatus" class="w-full bg-gray-800 p-2 rounded border border-gray-600 text-white">
+          <option value="Reported">Reported</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Restored">Restored</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm mb-1">Description</label>
+        <textarea id="issueDescription" rows="3" placeholder="Describe the issue" class="w-full bg-gray-800 p-2 rounded border border-gray-600 text-white"></textarea>
+      </div>
+
+      <div class="flex items-center mb-4">
+        <input type="checkbox" id="anonymous" class="mr-2">
+        <label for="anonymous" class="text-sm">Report Anonymously</label>
+      </div>
+
+      <button id="submitIssue" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded text-white font-semibold">Submit Issue</button>
+      <button id="closeModal" class="mt-2 w-full bg-gray-600 hover:bg-gray-700 py-2 rounded text-white font-semibold">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Issues Grid -->
+  <main class="px-6 pb-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6" id="issuesGrid"></main>
+
+  <script>
+    const reportBtn = document.getElementById('reportIssueBtn');
+    const modal = document.getElementById('reportModal');
+    const closeModal = document.getElementById('closeModal');
+    const photoInput = document.getElementById('photoInput');
+    const preview = document.getElementById('preview');
+    const submitBtn = document.getElementById('submitIssue');
+    const issuesGrid = document.getElementById('issuesGrid');
+    const myIssuesBtn = document.getElementById('myIssuesBtn');
+    const myIssuesModal = document.getElementById('myIssuesModal');
+    const closeMyIssues = document.getElementById('closeMyIssues');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    let uploadedPhotos = [];
+    let selectedLatLng = { lat: 23.0225, lng: 72.5714 };
+    const currentUser = localStorage.getItem('loggedInUser');
+    let allIssues = JSON.parse(localStorage.getItem('issues')) || [];
+
+    function getUserIssues() {
+      return allIssues.filter(issue => issue.user === currentUser);
+    }
+
+    function renderIssues() {
+      issuesGrid.innerHTML = '';
+      const userIssues = getUserIssues();
+
+      if (userIssues.length === 0) {
+        issuesGrid.innerHTML = `<p class="text-gray-400 text-center col-span-3">No issues reported yet.</p>`;
+      } else {
+        userIssues.forEach((issue, index) => {
+          const realIndex = allIssues.indexOf(issue);
+          const card = `
+            <a href="issue-details.html?id=${realIndex}" class="block bg-gray-800 rounded-xl p-3 card-shadow border border-gray-600">
+              <img src="${issue.photos[0] || 'https://via.placeholder.com/300x150'}" class="rounded-lg mb-3">
+              <div class="flex justify-between items-center text-sm mb-1">
+                <span class="bg-yellow-700 text-yellow-300 px-2 py-1 rounded-full">${issue.category}</span>
+                <span class="text-yellow-400">${issue.status} · ${issue.dateTime}</span>
+              </div>
+              <h2 class="text-lg font-semibold">${issue.title}</h2>
+              <p class="text-gray-400 text-sm mt-1">${issue.description}</p>
+              <p class="text-xs text-gray-500 mt-2">🏙️ ${issue.location.address || 'Location not specified'}</p>
+            </a>`;
+          issuesGrid.insertAdjacentHTML('beforeend', card);
+        });
+      }
+
+      document.getElementById('myIssuesList').innerHTML = userIssues.map(i =>
+        `<div class="bg-gray-800 p-3 rounded border border-gray-600">
+           <h3 class="font-semibold">${i.title}</h3>
+           <p class="text-gray-400 text-sm">Reported on ${i.dateTime} • Status: ${i.status}</p>
+         </div>`
+      ).join('');
+    }
+
+    // Open/close modals
+    reportBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+    closeModal.addEventListener('click', () => modal.classList.add('hidden'));
+    myIssuesBtn.addEventListener('click', () => myIssuesModal.classList.remove('hidden'));
+    closeMyIssues.addEventListener('click', () => myIssuesModal.classList.add('hidden'));
+
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('loggedIn');
+      localStorage.removeItem('loggedInUser');
+      window.location.href = "index.html";
+    });
+
+    // Photo preview
+    photoInput.addEventListener('change', () => {
+      preview.innerHTML = '';
+      uploadedPhotos = [];
+      Array.from(photoInput.files).slice(0,5).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          uploadedPhotos.push(e.target.result);
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          preview.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    // Map setup
+    let map = L.map('map').setView([23.0225, 72.5714], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+    let marker = L.marker([23.0225, 72.5714]).addTo(map);
+    map.on('click', function(e) {
+      selectedLatLng = e.latlng;
+      if (marker) map.removeLayer(marker);
+      marker = L.marker(e.latlng).addTo(map);
+    });
+
+    // Submit issue
+    submitBtn.addEventListener('click', () => {
+      const title = document.getElementById('issueTitle').value.trim();
+      const category = document.getElementById('issueCategory').value;
+      const description = document.getElementById('issueDescription').value.trim();
+      const status = document.getElementById('issueStatus').value;
+      const anonymous = document.getElementById('anonymous').checked;
+      const dateTime = new Date().toLocaleDateString();
+
+      if (!title || !category) {
+        alert('Please enter title and category');
+        return;
+      }
+
+      const newIssue = {
+        title,
+        category,
+        description,
+        anonymous,
+        user: currentUser || 'Guest',
+        status,
+        dateTime,
+        location: { address: 'Selected Location', lat: selectedLatLng.lat, lng: selectedLatLng.lng },
+        photos: uploadedPhotos,
+        activity: [`${status} - Reported by user`]
+      };
+
+      allIssues.push(newIssue);
+      localStorage.setItem('issues', JSON.stringify(allIssues));
+      modal.classList.add('hidden');
+      renderIssues();
+    });
+
+    // Listen for storage changes
+    window.addEventListener("storage", () => {
+      allIssues = JSON.parse(localStorage.getItem('issues')) || [];
+      renderIssues();
+    });
+
+    // Initial render
+    renderIssues();
+  </script>
+</body>
+</html>
